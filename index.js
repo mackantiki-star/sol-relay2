@@ -1,55 +1,64 @@
-import express from "express";
-import fetch from "node-fetch";
-import { WebSocketServer } from "ws";
+const express = require("express");
+const fetch = require("node-fetch");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
-const walletCache = new Map();
+// Get SOL price in SEK
+async function getSolPriceSEK() {
+  const res = await fetch(
+    "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=sek"
+  );
+  const data = await res.json();
+  return data.solana.sek;
+}
 
-async function fetchWallet(address) {
-  try {
-    // Dummy data until you wire real RPC
-    const data = {
-      balanceSol: 12.34,
-      balanceSek: 12345,
-      pnlTodaySek: 234,
-      tradeCountToday: 167,
-      status: "ok"
-    };
+// Get SOL balance from Solana RPC
+async function getSolBalance(address) {
+  const rpcRes = await fetch("https://api.mainnet-beta.solana.com", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "getBalance",
+      params: [address]
+    })
+  });
 
-    walletCache.set(address, data);
-    return data;
-  } catch {
-    return walletCache.get(address) || { status: "degraded" };
-  }
+  const rpcData = await rpcRes.json();
+
+  if (!rpcData.result) return 0;
+
+  const lamports = rpcData.result.value;
+  return lamports / 1000000000; // Convert to SOL
 }
 
 app.get("/wallet/:address", async (req, res) => {
-  const data = await fetchWallet(req.params.address);
-  res.json(data);
+  try {
+    const address = req.params.address;
+
+    const [balanceSol, solPriceSek] = await Promise.all([
+      getSolBalance(address),
+      getSolPriceSEK()
+    ]);
+
+    const balanceSek = balanceSol * solPriceSek;
+
+    res.json({
+      balanceSol,
+      balanceSek,
+      status: "ok"
+    });
+
+  } catch (err) {
+    res.json({
+      status: "degraded",
+      error: "Relay fetch failed"
+    });
+  }
 });
 
-const server = app.listen(PORT, () =>
-  console.log("Relay running on", PORT)
-);
-
-const wss = new WebSocketServer({ server });
-
-wss.on("connection", ws => {
-  ws.on("message", async msg => {
-    const { wallet } = JSON.parse(msg);
-
-    const send = async () => {
-      const data = await fetchWallet(wallet);
-      if (ws.readyState === ws.OPEN) {
-        ws.send(JSON.stringify(data));
-      }
-    };
-
-    send();
-    const interval = setInterval(send, 5000);
-
-    ws.on("close", () => clearInterval(interval));
-  });
+app.listen(PORT, () => {
+  console.log("Relay running on port " + PORT);
 });
