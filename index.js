@@ -6,19 +6,19 @@ const PORT = process.env.PORT || 10000;
 
 app.use(express.json());
 
-/* ---------------------------
-   SOL Price Cache (10 minutes)
-----------------------------*/
+/* ======================================
+   SOL PRICE CACHE (30 MINUTES)
+====================================== */
 
-let cachedPrice = null;
-let lastPriceFetch = 0;
+let solPriceSEK = null;
+let solPriceTimestamp = 0;
+const SOL_PRICE_CACHE_TIME = 30 * 60 * 1000; // 30 minutes
 
 async function getSolPriceSEK() {
   const now = Date.now();
 
-  // 10 minutes = 600000 ms
-  if (cachedPrice && now - lastPriceFetch < 600000) {
-    return cachedPrice;
+  if (solPriceSEK && now - solPriceTimestamp < SOL_PRICE_CACHE_TIME) {
+    return solPriceSEK;
   }
 
   const res = await fetch(
@@ -32,22 +32,24 @@ async function getSolPriceSEK() {
   const data = await res.json();
 
   if (!data.solana || !data.solana.sek) {
-    throw new Error("CoinGecko rate limited or invalid response");
+    throw new Error("Invalid CoinGecko response");
   }
 
-  cachedPrice = data.solana.sek;
-  lastPriceFetch = now;
+  solPriceSEK = data.solana.sek;
+  solPriceTimestamp = now;
 
-  return cachedPrice;
+  console.log("Updated SOL price (SEK):", solPriceSEK);
+
+  return solPriceSEK;
 }
 
-/* ---------------------------
-   Get SOL balance from Helius RPC
-----------------------------*/
+/* ======================================
+   HELIUS BALANCE
+====================================== */
 
 async function getSolBalance(address) {
   const rpcRes = await fetch(
-    "https://mainnet.helius-rpc.com/?api-key=462a99cb-e2d8-4b31-bdec-b621c47db906",
+    `https://mainnet.helius-rpc.com/?api-key=462a99cb-e2d8-4b31-bdec-b621c47db906`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -55,8 +57,8 @@ async function getSolBalance(address) {
         jsonrpc: "2.0",
         id: 1,
         method: "getBalance",
-        params: [address]
-      })
+        params: [address],
+      }),
     }
   );
 
@@ -66,53 +68,47 @@ async function getSolBalance(address) {
 
   const rpcData = await rpcRes.json();
 
-  if (rpcData.error) {
-    throw new Error(
-      "Helius RPC error: " + JSON.stringify(rpcData.error)
-    );
-  }
-
   if (!rpcData.result) {
-    throw new Error("No result from RPC");
+    throw new Error("Invalid RPC response");
   }
 
   const lamports = rpcData.result.value;
-  return lamports / 1000000000;
+  return lamports / 1_000_000_000;
 }
 
-/* ---------------------------
-   Wallet Endpoint
-----------------------------*/
+/* ======================================
+   WALLET ENDPOINT
+====================================== */
 
 app.get("/wallet/:address", async (req, res) => {
   try {
     const address = req.params.address;
 
-    const [balanceSol, solPriceSek] = await Promise.all([
+    const [balanceSol, solPriceSEK] = await Promise.all([
       getSolBalance(address),
-      getSolPriceSEK()
+      getSolPriceSEK(),
     ]);
 
-    const balanceSek = balanceSol * solPriceSek;
+    const balanceSek = balanceSol * solPriceSEK;
 
     res.json({
       balanceSol,
       balanceSek,
-      status: "ok"
+      status: "ok",
     });
   } catch (err) {
     console.error("Relay error:", err);
 
     res.json({
       status: "degraded",
-      error: "Relay fetch failed"
+      error: "Relay fetch failed",
     });
   }
 });
 
-/* ---------------------------
-   Root Health Check
-----------------------------*/
+/* ======================================
+   HEALTH CHECK
+====================================== */
 
 app.get("/", (req, res) => {
   res.send("SOL Relay running");
