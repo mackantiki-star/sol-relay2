@@ -21,7 +21,7 @@ async function getSolPriceSEK() {
    Get SOL balance from RPC
 ----------------------------*/
 async function getSolBalance(address) {
-  const rpcRes = await fetch("https://api.mainnet-beta.solana.com", {
+  const rpcRes = await fetch("https://mainnet.helius-rpc.com/?api-key=f27f9256-de17-4d5b-88fd-56db2030d630", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -78,3 +78,4 @@ app.get("/", (req, res) => {
 app.listen(PORT, () => {
   console.log("Relay running on port", PORT);
 });
+
