@@ -1,10 +1,14 @@
-const express = require("express");
-const fetch = require("node-fetch");
+import express from "express";
+import fetch from "node-fetch";
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// Get SOL price in SEK
+app.use(express.json());
+
+/* ---------------------------
+   Get SOL price in SEK
+----------------------------*/
 async function getSolPriceSEK() {
   const res = await fetch(
     "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=sek"
@@ -13,7 +17,9 @@ async function getSolPriceSEK() {
   return data.solana.sek;
 }
 
-// Get SOL balance from Solana RPC
+/* ---------------------------
+   Get SOL balance from RPC
+----------------------------*/
 async function getSolBalance(address) {
   const rpcRes = await fetch("https://api.mainnet-beta.solana.com", {
     method: "POST",
@@ -31,9 +37,12 @@ async function getSolBalance(address) {
   if (!rpcData.result) return 0;
 
   const lamports = rpcData.result.value;
-  return lamports / 1000000000; // Convert to SOL
+  return lamports / 1000000000;
 }
 
+/* ---------------------------
+   Wallet endpoint
+----------------------------*/
 app.get("/wallet/:address", async (req, res) => {
   try {
     const address = req.params.address;
@@ -50,8 +59,8 @@ app.get("/wallet/:address", async (req, res) => {
       balanceSek,
       status: "ok"
     });
-
   } catch (err) {
+    console.error("Relay error:", err);
     res.json({
       status: "degraded",
       error: "Relay fetch failed"
@@ -59,6 +68,13 @@ app.get("/wallet/:address", async (req, res) => {
   }
 });
 
+/* ---------------------------
+   Root route (health check)
+----------------------------*/
+app.get("/", (req, res) => {
+  res.send("SOL Relay running");
+});
+
 app.listen(PORT, () => {
-  console.log("Relay running on port " + PORT);
+  console.log("Relay running on port", PORT);
 });
