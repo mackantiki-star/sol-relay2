@@ -1,10 +1,12 @@
 import express from "express";
+import cors from "cors";  // NEW: Fixes Chrome extension CORS
 import fetch from "node-fetch";
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 
 app.use(express.json());
+app.use(cors());  // NEW: Allows Chrome extensions + all browsers
 
 /* ======================================
    SOL PRICE CACHE (30 MINUTES)
@@ -101,7 +103,7 @@ app.get("/wallet/:address", async (req, res) => {
 
     res.json({
       status: "degraded",
-      error: "Relay fetch failed",
+      error: err.message,
     });
   }
 });
