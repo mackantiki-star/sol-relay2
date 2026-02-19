@@ -32,9 +32,19 @@ async function getSolBalance(address) {
     })
   });
 
-  const rpcData = await rpcRes.json();
+if (!rpcRes.ok) {
+  throw new Error("Helius HTTP error");
+}
 
-  if (!rpcData.result) return 0;
+const rpcData = await rpcRes.json();
+
+if (rpcData.error) {
+  throw new Error("Helius RPC error: " + JSON.stringify(rpcData.error));
+}
+
+if (!rpcData.result) {
+  throw new Error("No result from RPC");
+}
 
   const lamports = rpcData.result.value;
   return lamports / 1000000000;
@@ -78,5 +88,6 @@ app.get("/", (req, res) => {
 app.listen(PORT, () => {
   console.log("Relay running on port", PORT);
 });
+
 
 
